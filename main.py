@@ -44,7 +44,21 @@ class KissaCore:
 
         # ou le fichier JSON défini dans le .env
 
-        self.vision_client = vision.ImageAnnotatorClient()
+        try:
+            # Vérifier si les credentials sont disponibles
+            credentials_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+            if credentials_path and os.path.exists(credentials_path):
+                self.vision_client = vision.ImageAnnotatorClient()
+            elif os.path.exists('kissa-vision-key.json'):
+                # Fallback: chercher le fichier local
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'kissa-vision-key.json'
+                self.vision_client = vision.ImageAnnotatorClient()
+            else:
+                print("⚠️ Attention : GOOGLE_APPLICATION_CREDENTIALS non configuré. OCR désactivé.")
+                self.vision_client = None
+        except Exception as e:
+            print(f"⚠️ Attention : Erreur lors de l'initialisation de Google Vision : {e}. OCR désactivé.")
+            self.vision_client = None
 
         
 
@@ -91,6 +105,10 @@ class KissaCore:
     def step_1_ocr(self, image_path):
 
         """Lit le texte sur la pochette (Google Vision)"""
+
+        if not self.vision_client:
+            print("⚠️ OCR non disponible : Google Vision credentials manquants")
+            return None
 
         print(f"👁️  Analyse visuelle de {image_path}...")
 
