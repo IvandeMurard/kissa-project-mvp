@@ -24,7 +24,7 @@ REM Attendre un peu avant de lancer le frontend
 timeout /t 3 /nobreak >nul
 
 REM Lancer le frontend dans une nouvelle fenêtre
-start "Kissa Frontend" cmd /k "cd /d %~dp0frontend && if not exist node_modules call npm install && npm run dev"
+start "Kissa Frontend" cmd /k "cd /d %~dp0kissa-frontend && if not exist node_modules call npm install && npm run dev"
 
 echo.
 echo Serveurs lancés dans des fenêtres séparées.
