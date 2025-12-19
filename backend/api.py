@@ -38,7 +38,17 @@ supabase: Client = create_client(url, key)
 # --- CONFIGURATION FASTAPI ---
 app = FastAPI(title="Kissa API", description="Backend avec mémoire Supabase")
 
-# Middleware pour logger toutes les requêtes
+# --- BLOC CORS CRITIQUE (EN PREMIER) ---
+# Ceci autorise le Frontend Vercel à parler au Backend Render
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # "*" veut dire : Accepte toutes les origines (Vercel, Mobile, Localhost)
+    allow_credentials=True,
+    allow_methods=["*"],  # Autorise GET, POST, DELETE, etc.
+    allow_headers=["*"],
+)
+
+# Middleware pour logger toutes les requêtes (EN SECOND)
 class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         start_time = time.time()
@@ -64,13 +74,6 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         return response
 
 app.add_middleware(LoggingMiddleware)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # On démarre le moteur Kissa
 kissa = KissaCore()
