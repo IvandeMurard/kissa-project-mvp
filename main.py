@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 # Clients APIs
 
 from google.cloud import vision
+from google.oauth2 import service_account
 
 import discogs_client
 
@@ -38,27 +39,37 @@ class KissaCore:
 
     def __init__(self):
 
-        # 1. Setup Google Vision
+        print("Initialisation du Core Kissa...")
 
-        # Google cherche automatiquement la variable 'GOOGLE_APPLICATION_CREDENTIALS' dans l'OS
-
-        # ou le fichier JSON défini dans le .env
-
-        try:
-            # Vérifier si les credentials sont disponibles
-            credentials_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
-            if credentials_path and os.path.exists(credentials_path):
-                self.vision_client = vision.ImageAnnotatorClient()
-            elif os.path.exists('kissa-vision-key.json'):
-                # Fallback: chercher le fichier local
-                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'kissa-vision-key.json'
-                self.vision_client = vision.ImageAnnotatorClient()
-            else:
-                print("⚠️ Attention : GOOGLE_APPLICATION_CREDENTIALS non configuré. OCR désactivé.")
+        # --- 1. GOOGLE VISION (SETUP HYBRIDE) ---
+        # On vérifie si on a le JSON brut dans une variable (Cas Render/Prod)
+        google_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+        
+        if google_json:
+            print("Mode Cloud : Chargement Google depuis variable d'environnement")
+            try:
+                info = json.loads(google_json)
+                creds = service_account.Credentials.from_service_account_info(info)
+                self.vision_client = vision.ImageAnnotatorClient(credentials=creds)
+            except Exception as e:
+                print(f"ERREUR chargement Google JSON: {e}")
                 self.vision_client = None
-        except Exception as e:
-            print(f"⚠️ Attention : Erreur lors de l'initialisation de Google Vision : {e}. OCR désactivé.")
-            self.vision_client = None
+        else:
+            print("Mode Local : Chargement Google depuis fichier standard")
+            # En local, il utilisera automatiquement le fichier pointé par GOOGLE_APPLICATION_CREDENTIALS
+            try:
+                credentials_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+                if credentials_path and os.path.exists(credentials_path):
+                    self.vision_client = vision.ImageAnnotatorClient()
+                elif os.path.exists('kissa-vision-key.json'):
+                    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'kissa-vision-key.json'
+                    self.vision_client = vision.ImageAnnotatorClient()
+                else:
+                    print("ATTENTION : GOOGLE_APPLICATION_CREDENTIALS non configuré. OCR désactivé.")
+                    self.vision_client = None
+            except Exception as e:
+                print(f"ATTENTION : Erreur lors de l'initialisation de Google Vision : {e}. OCR désactivé.")
+                self.vision_client = None
 
         
 
@@ -68,7 +79,7 @@ class KissaCore:
 
         if not user_token:
 
-            print("⚠️ Attention : DISCOGS_TOKEN manquant dans le .env")
+            print("ATTENTION : DISCOGS_TOKEN manquant dans le .env")
 
         self.discogs = discogs_client.Client('KissaApp/1.0', user_token=user_token)
 
@@ -88,7 +99,7 @@ class KissaCore:
 
         else:
 
-            print("⚠️ Attention : Identifiants Spotify manquants dans le .env")
+            print("ATTENTION : Identifiants Spotify manquants dans le .env")
 
             self.sp = None
 
@@ -107,10 +118,10 @@ class KissaCore:
         """Lit le texte sur la pochette (Google Vision)"""
 
         if not self.vision_client:
-            print("⚠️ OCR non disponible : Google Vision credentials manquants")
+            print("ATTENTION : OCR non disponible : Google Vision credentials manquants")
             return None
 
-        print(f"👁️  Analyse visuelle de {image_path}...")
+        print(f"Analyse visuelle de {image_path}...")
 
         try:
 
@@ -124,7 +135,7 @@ class KissaCore:
             
             # Vérification des erreurs de l'API
             if response.error.message:
-                print(f"❌ Erreur Google Vision : {response.error.message}")
+                print(f"ERREUR Google Vision : {response.error.message}")
                 return None
 
             texts = response.text_annotations
@@ -135,7 +146,7 @@ class KissaCore:
 
                 clean_query = self._clean_text(raw_text)
 
-                print(f"📝 Texte détecté : {clean_query}")
+                print(f"Texte détecté : {clean_query}")
 
                 return clean_query
 
@@ -145,7 +156,7 @@ class KissaCore:
 
         except Exception as e:
 
-            print(f"❌ Erreur OCR : {e}")
+            print(f"ERREUR OCR : {e}")
 
             return None
 
@@ -155,7 +166,7 @@ class KissaCore:
 
         """Récupère les métadonnées (Discogs)"""
 
-        print("💿 Recherche Discogs...")
+        print("Recherche Discogs...")
 
         try:
 
@@ -221,7 +232,7 @@ class KissaCore:
 
         except Exception as e:
 
-            print(f"❌ Erreur Discogs: {e}")
+            print(f"ERREUR Discogs: {e}")
 
             return None
 
@@ -237,7 +248,7 @@ class KissaCore:
 
             
 
-        print("🎵 Recherche Spotify...")
+        print("Recherche Spotify...")
 
         q = f"artist:{artist} album:{album_title}"
 
@@ -275,7 +286,7 @@ class KissaCore:
 
         except Exception as e:
 
-            print(f"⚠️ Erreur Spotify (non bloquant) : {e}")
+            print(f"ATTENTION : Erreur Spotify (non bloquant) : {e}")
 
             return None
 
@@ -389,7 +400,7 @@ class KissaCore:
 
         """Recherche manuelle sans image (texte -> Discogs -> Spotify)"""
 
-        print(f"🔎 Recherche manuelle pour : {text_query}")
+        print(f"Recherche manuelle pour : {text_query}")
 
         
 
@@ -475,7 +486,7 @@ class KissaCore:
 
         """Recherche 'Google Style' : Tolérante et robuste"""
 
-        print(f"🔎 Recherche robuste pour : {query}")
+        print(f"Recherche robuste pour : {query}")
 
         
 
@@ -627,17 +638,17 @@ class KissaCore:
 
                     # Si UN élément est mal formé, on l'affiche dans la console mais on ne plante pas la liste
 
-                    print(f"⚠️ Élément ignoré (Erreur de donnée) : {item_error}")
+                    print(f"ATTENTION : Element ignore (Erreur de donnee) : {item_error}")
 
                     continue
 
-            print(f"✅ {len(candidates)} résultats trouvés sur {total_items} éléments examinés pour '{query}'")
+            print(f"SUCCES : {len(candidates)} resultats trouves sur {total_items} elements examines pour '{query}'")
 
             return candidates
 
         except Exception as e:
 
-            print(f"❌ Erreur critique recherche globale : {e}")
+            print(f"ERREUR critique recherche globale : {e}")
 
             return []
 
@@ -647,7 +658,7 @@ class KissaCore:
 
         """Ajoute un album via son ID Discogs précis (Sélection utilisateur)"""
 
-        print(f"💿 Récupération ID Discogs : {discogs_id}")
+        print(f"Recuperation ID Discogs : {discogs_id}")
 
         try:
 
@@ -757,7 +768,7 @@ if __name__ == "__main__":
 
     if os.path.exists(TEST_IMAGE):
 
-        print("🚀 Démarrage du crash test Kissa...")
+        print("Demarrage du crash test Kissa...")
 
         result = app.process(TEST_IMAGE)
 
@@ -769,5 +780,5 @@ if __name__ == "__main__":
 
     else:
 
-        print(f"❌ Fichier '{TEST_IMAGE}' introuvable. Ajoute une photo pour tester.")
+        print(f"ERREUR : Fichier '{TEST_IMAGE}' introuvable. Ajoute une photo pour tester.")
 
